@@ -3,10 +3,10 @@ library(ggplot2)
 library(tidyverse)
 
 # Read in human proteome composition table
-proteome_composition <- read.csv("C:\\\\Users\\00101127\\sequence_data\\human_proteome_AAcomposition.csv")
+proteome_composition <- read.csv("human_proteome_AAcomposition.csv")
 
 # Read in protein sequence file
-fasta <- read.fasta("C:\\\\Users\\00101127\\sequence_data\\hSFPQ_split_P23246.fasta.txt")
+fasta <- read.fasta("hNONO_Q15233.fasta.txt")
 
 # extract aa sequence (as character vector)
 aa.seq <- as.vector(fasta$ali)
@@ -22,9 +22,9 @@ comp_lookup <- pull(proteome_composition, pc, name = aa)
 # helper funciton to classify a AA position into one of the 3 regions
 classify_region <- function(x) {
   case_when(
-    x %in% 1:275 ~ "nlcr", 
-    x %in% 276:598 ~ "core", 
-    x %in% 599:707 ~ "clcr"
+    x %in% 1:52 ~ "nlcr", 
+    x %in% 53:371 ~ "core", 
+    x %in% 372:471 ~ "clcr"
   ) %>% 
     factor(levels = c("nlcr", "core", "clcr"))
 }
