@@ -6,7 +6,7 @@ library(tidyverse)
 proteome_composition <- read.csv("human_proteome_AAcomposition.csv")
 
 # Read in protein sequence file
-fasta <- read.fasta("hNONO_Q15233.fasta.txt")
+fasta <- read.fasta("hSFPQ_P23246.fasta.txt")
 
 # extract aa sequence (as character vector)
 aa.seq <- as.vector(fasta$ali)
@@ -14,25 +14,20 @@ aa.seq <- as.vector(fasta$ali)
 # List 20 standard amino acids (A through Y)
 aa.list <- LETTERS[c(-2,-10,-15,-21,-24,-26)]
 
-
-# this creates a "named vector", which we can use as a lookup table for different 
-# aa values
+# Create a "named vector" lookup table for different aa values
 comp_lookup <- pull(proteome_composition, pc, name = aa)
 
 # helper funciton to classify a AA position into one of the 3 regions
 classify_region <- function(x) {
   case_when(
-    x %in% 1:52 ~ "nlcr", 
-    x %in% 53:371 ~ "core", 
-    x %in% 372:471 ~ "clcr"
+    x %in% 1:275 ~ "nlcr", 
+    x %in% 276:598 ~ "core", 
+    x %in% 599:707 ~ "clcr"
   ) %>% 
     factor(levels = c("nlcr", "core", "clcr"))
 }
 
-
-
-# set up tibble / dataframe with all ~700 AA, their number and their cetegorised
-# region of the protien
+# Set up tibble with all AA, their number and their categorised region of the protein
 dat <- tibble(
   seq = aa.seq
 ) %>% 
@@ -41,28 +36,39 @@ dat <- tibble(
     region = classify_region(resnum)
   )
 
-
-# do the region-wise summary for each AA in each region as a relative proportion
-# to the overall genomic enrichment and plot it
-
-dat  %>% 
+# Do the region-wise summary for each AA in each region as a relative proportion
+# to the overall genomic enrichment
+summary_data <- dat  %>% 
   summarise(
     count = n(),
     .by = c(region, seq)
   ) %>% 
+  complete(region, seq = aa.list, fill = list(count = 0)) %>% 
   mutate(
-    perc = count / sum(count) * 100 / comp_lookup[seq], 
+    perc = ifelse(count == 0, 0, count / sum(count) * 100 / comp_lookup[seq]), 
     .by = region
-  ) %>% 
+  )
 
+# Create a separate dataframe for the grey bars
+grey_bar_data <- summary_data %>% 
+  filter(perc == 0) %>%
+  mutate(ymin = 0, ymax = 1.0)
 
-  ggplot(aes(seq, perc, fill = region)) + 
+# Convert seq to factor to ensure correct positioning
+summary_data$seq <- factor(summary_data$seq, levels = aa.list)
+grey_bar_data$seq <- factor(grey_bar_data$seq, levels = aa.list)
+
+# Plot with grey bars and enrichment bars
+plt1 <- ggplot(summary_data, aes(seq, perc, fill = region)) + 
   geom_col(alpha = 0.5) + 
+  geom_rect(data = grey_bar_data, 
+            aes(xmin = as.numeric(seq) - 0.45, xmax = as.numeric(seq) + 0.45, ymin = ymin, ymax = ymax),
+            fill = "grey", alpha = 0.2) +
   facet_wrap(~region)  + 
   xlab("amino acid") +
   ylab("enrichment") +
-  scale_y_log10(limits = c(0.1,10), breaks = c(0.1,0.3,1.0,3,10)) +
-  theme_bw() -> plt1
+  scale_y_log10(limits = c(0.09, 10), breaks = c(0.1, 0.3, 1.0, 3, 10)) +
+  theme_bw()
 
 #### AA composition of entire protein ####
 aa.pc <- sapply(
@@ -97,7 +103,7 @@ ggplot(data = overall_composition,
 
 #### AA composition in sliding window #### 
 
-window.width <- 50
+window.width <- 30
 
 composition <- data.frame(aa.list)
 
@@ -121,7 +127,7 @@ colnames(composition) <- c("AA", round(seq(window.width/2, length(aa.seq)-(windo
 
 # Create parameters for coloring background of plot(s) by region:
 tibble(
-  num = 1:707
+  num = 1:length(aa.seq)
 ) %>% 
   mutate(
     region = classify_region(num)
@@ -135,22 +141,22 @@ tibble(
 
 
 # #### To plot composition for all 20 AAs on different panels: ####
-# composition %>% 
-#   # this takes the data from wide format to long format
-#   #   (best to avoid rownames, and instead work explicitly with a column with the 
-#   #    same ID)
-#   pivot_longer(
-#     cols = c(colnames(composition))[-1],
-#     names_to = "position",
-#     values_to = "proportion"
-#   ) %>% 
-#   ggplot(mapping = aes(x = as.numeric(position), y = proportion)) +
-#   geom_line() +
-#   xlab("aa position (centre of window)") +
-#   ylab("frequency (%)") +
-#   labs(title = fasta$id, caption = paste("window width = ", window.width)) +
-#   facet_wrap(~AA)
-# 
+composition %>%
+  # this takes the data from wide format to long format
+  #   (best to avoid rownames, and instead work explicitly with a column with the
+  #    same ID)
+  pivot_longer(
+    cols = c(colnames(composition))[-1],
+    names_to = "position",
+    values_to = "proportion"
+  ) %>%
+  ggplot(mapping = aes(x = as.numeric(position), y = proportion)) +
+  geom_line() +
+  xlab("aa position (centre of window)") +
+  ylab("frequency (%)") +
+  labs(title = fasta$id, caption = paste("window width = ", window.width)) +
+  facet_wrap(~AA)
+
 
 #### To plot composition for all 20 AAs on same graph: ####
 
@@ -216,39 +222,25 @@ enrichment <- cbind(composition$AA,
                     composition[-1]/proteome_composition$pc)
 
 colnames(enrichment)[1] <- "AA"
-# 
-# # Create parameters for coloring background of plot(s) by region:
-# tibble(
-#   num = 1:707
-# ) %>% 
-#   mutate(
-#     region = classify_region(num)
-#   ) %>% 
-#   summarise(start = min(num), 
-#             end = max(num), 
-#             .by = region) %>% 
-#   mutate(
-#     bottom = 0, top = 100
-#   ) -> box_params
 
 
 # #### To plot enrichment for all 20 AAs on different panels: ####
-# enrichment %>% 
+# enrichment %>%
 #   # this takes the data from wide format to long format
-#   #   (best to avoid rownames, and instead work explicitly with a column with the 
+#   #   (best to avoid rownames, and instead work explicitly with a column with the
 #   #    same ID)
 #   pivot_longer(
 #     cols = c(colnames(enrichment))[-1],
 #     names_to = "position",
 #     values_to = "proportion"
-#   ) %>% 
+#   ) %>%
 #   ggplot(mapping = aes(x = as.numeric(position), y = proportion)) +
 #   geom_line() +
 #   xlab("aa position (centre of window)") +
 #   ylab("fold enrichment") +
 #   labs(title = fasta$id, caption = paste("window width = ", window.width)) +
 #   facet_wrap(~AA)
-# 
+
 
 #### To plot enrichment for all 20 AAs on same graph: ####
 
