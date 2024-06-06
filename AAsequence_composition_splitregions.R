@@ -2,14 +2,43 @@ library(bio3d)
 library(ggplot2)
 library(tidyverse)
 
+# Would you like to fetch sequence from the web? (otherwise, type 'FALSE')
+fetch_sequence <- TRUE
+
+# If 'TRUE', what is the accession number?
+accession_number <- "Q15233"
+
+# Otherwise, provide path to fasta file containing sequence for analysis:
+fasta_file <- "hNONO_Q15233.fasta.txt"
+
+if (fetch_sequence) {
+  # Install required package (if not already installed)
+  if (!require(rentrez)) install.packages("rentrez")
+  library(rentrez)
+  
+  # Fetch the protein sequence from the NCBI protein database
+  fetch <- entrez_fetch(db = "protein", id = accession_number, rettype = "fasta")
+  
+  # Extract sequence id from header
+  seq_id <- gsub("^>([^ ]+).*", "\\1", fetch[[1]], ignore.case=TRUE)
+  
+  # Extract sequence as a vector with each AA as a single element 
+  aa.seq <- str_split(paste(c(str_split(fetch, "\n")[[1]][-1]), collapse = ""), "")[[1]]
+  
+  # Parse fetched record to give list containing id and seq
+  fasta <- list(id = seq_id,
+                ali = aa.seq)
+} else {
+  # Read in protein sequence file
+  fasta <- read.fasta("hNONO_Q15233.fasta.txt")
+  
+  # extract aa sequence (as character vector)
+  aa.seq <- as.vector(fasta$ali)
+}
+
+
 # Read in human proteome composition table
 proteome_composition <- read.csv("human_proteome_AAcomposition.csv")
-
-# Read in protein sequence file
-fasta <- read.fasta("hSFPQ_P23246.fasta.txt")
-
-# extract aa sequence (as character vector)
-aa.seq <- as.vector(fasta$ali)
 
 # List 20 standard amino acids (A through Y)
 aa.list <- LETTERS[c(-2,-10,-15,-21,-24,-26)]
@@ -20,9 +49,9 @@ comp_lookup <- pull(proteome_composition, pc, name = aa)
 # helper funciton to classify a AA position into one of the 3 regions
 classify_region <- function(x) {
   case_when(
-    x %in% 1:275 ~ "nlcr", 
-    x %in% 276:598 ~ "core", 
-    x %in% 599:707 ~ "clcr"
+    x %in% 1:52 ~ "nlcr", 
+    x %in% 53:371 ~ "core", 
+    x %in% 372:471 ~ "clcr"
   ) %>% 
     factor(levels = c("nlcr", "core", "clcr"))
 }
@@ -173,8 +202,8 @@ composition %>%
 
 # aas_to_include <- c(1:20)
 
-proportion_cutoff_for_colouring <- 30
-enrichment_cutoff_for_colouring <- 5
+# proportion_cutoff_for_colouring <- 30
+enrichment_cutoff_for_colouring <- 3.8
 
 aas_to_include <- c()
 for (i in 1:nrow(enrichment)) {
@@ -258,7 +287,7 @@ plt2 <- composition[aas_to_include,] %>%
   
   scale_color_manual(
     values = c(
-      "A" = "orange",
+      "A" = "palegreen",
       "C" = "yellow",
       "D" = "red",
       "E" = "red",
